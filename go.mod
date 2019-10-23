@@ -1,3 +1,3 @@
-module concurrentList
+module concurrentlist
 
 go 1.13
