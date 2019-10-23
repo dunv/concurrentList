@@ -7,6 +7,7 @@ import (
 )
 
 // This will get stuck in a deadlock, if it fails
+
 func TestShift(t *testing.T) {
 	list := NewConcurrentList()
 	insertItems := []map[int]bool{}
@@ -44,21 +45,23 @@ func TestShift(t *testing.T) {
 	for item := range readChannel {
 		verifyItems[item[0]][item[1]] = true
 		// fmt.Println("consumed", item[0], item[1])
-		complete := true
-		for producerKey := range verifyItems {
-			for _, itemValue := range verifyItems[producerKey] {
-				if !itemValue {
-					complete = false
-				}
-			}
-		}
-
-		if complete {
+		if verify(verifyItems) {
 			fmt.Printf("\n\nTook %s \n", time.Since(start))
 			return
 		}
 	}
 
+}
+
+func verify(verifyItems []map[int]bool) bool {
+	for producerKey := range verifyItems {
+		for _, itemValue := range verifyItems[producerKey] {
+			if !itemValue {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func consumer(list *ConcurrentList, readChannel *chan []int, t *testing.T) {
