@@ -11,8 +11,13 @@ var ErrEmptyList = errors.New("list is empty")
 
 // ConcurrentList data-structure which holds all data
 type ConcurrentList struct {
-	data                 []interface{}
-	mutex                sync.Mutex
+	// Hold data
+	data []interface{}
+
+	// Protect list
+	mutex sync.Mutex
+
+	// Keep track of subscribers in a list. This way we can preserve order
 	nextAddedSubscribers []*chan bool
 }
 
@@ -42,18 +47,12 @@ func (l *ConcurrentList) Append(item interface{}) {
 }
 
 // Shift will attempt to get the "oldest" item from the list
-// Will return EMPTY_LIST if the list is empty
+// Will return ErrEmptyList if the list is empty
 func (l *ConcurrentList) Shift() (interface{}, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
-	if len(l.data) < 1 {
-		return nil, ErrEmptyList
-	}
-
-	firstElement := l.data[0]
-	l.data = l.data[1:len(l.data)]
-	return firstElement, nil
+	return l.shiftWithoutLock()
 }
 
 // internal helper function
@@ -72,40 +71,52 @@ func (l *ConcurrentList) shiftWithoutLock() (interface{}, error) {
 // to facilitate troubleshooting
 func (l *ConcurrentList) GetNext() (interface{}, error) {
 	l.mutex.Lock()
+
+	// If we have an item in the list -> return it immediately
 	if len(l.data) > 0 {
 		defer l.mutex.Unlock()
 		return l.shiftWithoutLock()
 	}
 
+	// If the list is empty -> create a return-channel on which we will publish when another item is available
 	getNextChannel := make(chan bool)
 	l.nextAddedSubscribers = append(l.nextAddedSubscribers, &getNextChannel)
 	l.mutex.Unlock()
 
+	// Wait until another item has been received
 	<-getNextChannel
+
+	// Return it
 	return l.GetNext()
 }
 
 // GetNextWithTimeout will get the "oldest" item from the list. Will block until an item is available OR the specified
-// duration passed. The returned error is of type EMTPY_LIST and should NEVER occur. I kept this in
+// duration passed. The returned error is of type ErrEmptyList and should NEVER occur. I kept this in
 // to facilitate troubleshooting
 func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{}, error) {
 	l.mutex.Lock()
-	var getNextChannel *chan bool
+
+	// If we have an item in the list -> return it immediately
 	if len(l.data) > 0 {
 		l.mutex.Unlock()
 		return l.Shift()
 	}
 
+	// If the list is empty -> create a return-channel on which we will publish when another item is available
 	tmp := make(chan bool)
-	getNextChannel = &tmp
+	getNextChannel := &tmp
 	l.nextAddedSubscribers = append(l.nextAddedSubscribers, getNextChannel)
 	l.mutex.Unlock()
 
 	select {
 	case <-*getNextChannel:
+		// We either receive an item in time
 		return l.GetNext()
 	case <-time.After(timeout):
+		// ... or not -> remove ourselves from subscriber list an return ErrEmptyList
 		l.mutex.Lock()
+
+		// Remove from subscriber-list, as timeout occured (essentially recreating the list)
 		var newSubscriberList []*chan bool
 		for index := range l.nextAddedSubscribers {
 			if l.nextAddedSubscribers[index] != getNextChannel {
@@ -114,6 +125,7 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 		}
 		l.nextAddedSubscribers = newSubscriberList
 		l.mutex.Unlock()
+
 		return nil, ErrEmptyList
 	}
 }
@@ -146,7 +158,11 @@ func (l *ConcurrentList) DeleteWithFilter(predicate func(item interface{}) bool)
 			filteredItems = append(filteredItems, item)
 		}
 	}
+
+	// Keep non-filtered items
 	l.data = nonFilteredItems
+
+	// Return filtered ones
 	return filteredItems
 }
 

@@ -2,6 +2,7 @@ package concurrentList
 
 import (
 	"testing"
+	"time"
 )
 
 // This will get stuck in a deadlock, if it fails
@@ -26,8 +27,6 @@ func TestGetNext(t *testing.T) {
 		}
 	}
 
-	// start := time.Now()
-
 	// Create consumers
 	for i := 0; i < totalConsumer; i++ {
 		go consumer(list, &readChannel, t)
@@ -41,9 +40,7 @@ func TestGetNext(t *testing.T) {
 	// Validate
 	for item := range readChannel {
 		verifyItems[item[0]][item[1]] = true
-		// fmt.Println("consumed", item[0], item[1])
 		if verify(verifyItems) {
-			// fmt.Printf("\n\nTook %s \n", time.Since(start))
 			return
 		}
 	}
@@ -62,8 +59,12 @@ func verify(verifyItems []map[int]bool) bool {
 }
 
 func consumer(list *ConcurrentList, readChannel *chan []int, t *testing.T) {
+	timeSpentWaiting := int64(0)
 	for {
+		tmp := time.Now()
 		item, err := list.GetNext()
+		dur := time.Since(tmp)
+		timeSpentWaiting += dur.Nanoseconds()
 		if err != nil {
 			t.Error("error", err)
 			continue
