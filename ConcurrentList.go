@@ -1,10 +1,12 @@
 package concurrentList
 
 import (
-	"fmt"
+	"errors"
 	"sync"
 	"time"
 )
+
+var EMPTY_LIST = errors.New("list is empty")
 
 type ConcurrentList struct {
 	data                 []interface{}
@@ -40,7 +42,7 @@ func (l *ConcurrentList) Shift() (interface{}, error) {
 	defer l.mutex.Unlock()
 
 	if len(l.data) < 1 {
-		return nil, fmt.Errorf("list is empty, cannot shift")
+		return nil, EMPTY_LIST
 	}
 	firstElement := l.data[0]
 	l.data = l.data[1:len(l.data)]
@@ -49,7 +51,7 @@ func (l *ConcurrentList) Shift() (interface{}, error) {
 
 func (l *ConcurrentList) shiftWithoutLock() (interface{}, error) {
 	if len(l.data) < 1 {
-		return nil, fmt.Errorf("list is empty, cannot shift")
+		return nil, EMPTY_LIST
 	}
 	firstElement := l.data[0]
 	l.data = l.data[1:len(l.data)]
@@ -96,7 +98,7 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 			}
 			l.nextAddedSubscribers = newSubscriberList
 			l.mutex.Unlock()
-			return nil, fmt.Errorf("Nothing within timeout")
+			return nil, EMPTY_LIST
 		}
 	}
 }

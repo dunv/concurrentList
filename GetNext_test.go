@@ -1,14 +1,11 @@
 package concurrentList
 
 import (
-	"fmt"
 	"testing"
-	"time"
 )
 
 // This will get stuck in a deadlock, if it fails
-
-func TestShift(t *testing.T) {
+func TestGetNext(t *testing.T) {
 	list := NewConcurrentList()
 	insertItems := []map[int]bool{}
 	verifyItems := []map[int]bool{}
@@ -29,7 +26,7 @@ func TestShift(t *testing.T) {
 		}
 	}
 
-	start := time.Now()
+	// start := time.Now()
 
 	// Create consumers
 	for i := 0; i < totalConsumer; i++ {
@@ -46,7 +43,7 @@ func TestShift(t *testing.T) {
 		verifyItems[item[0]][item[1]] = true
 		// fmt.Println("consumed", item[0], item[1])
 		if verify(verifyItems) {
-			fmt.Printf("\n\nTook %s \n", time.Since(start))
+			// fmt.Printf("\n\nTook %s \n", time.Since(start))
 			return
 		}
 	}
