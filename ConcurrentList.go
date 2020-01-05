@@ -6,14 +6,17 @@ import (
 	"time"
 )
 
+// EMPTY_LIST error is returned if one tries to get items from an empty list
 var EMPTY_LIST = errors.New("list is empty")
 
+// ConcurrentList data-structure which holds all data
 type ConcurrentList struct {
 	data                 []interface{}
 	mutex                sync.Mutex
 	nextAddedSubscribers []*chan bool
 }
 
+// Constructor for creating a ConcurrentList (is required for initializing subscriber channels)
 func NewConcurrentList() *ConcurrentList {
 	return &ConcurrentList{
 		data:                 []interface{}{},
@@ -22,6 +25,7 @@ func NewConcurrentList() *ConcurrentList {
 	}
 }
 
+// Append to list. This method should never block
 func (l *ConcurrentList) Append(item interface{}) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -37,6 +41,8 @@ func (l *ConcurrentList) Append(item interface{}) {
 	}
 }
 
+// Attempt to get the "oldest" item from the list
+// Will return EMPTY_LIST if the list is empty
 func (l *ConcurrentList) Shift() (interface{}, error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -49,6 +55,7 @@ func (l *ConcurrentList) Shift() (interface{}, error) {
 	return firstElement, nil
 }
 
+// internal helper function
 func (l *ConcurrentList) shiftWithoutLock() (interface{}, error) {
 	if len(l.data) < 1 {
 		return nil, EMPTY_LIST
@@ -58,6 +65,9 @@ func (l *ConcurrentList) shiftWithoutLock() (interface{}, error) {
 	return firstElement, nil
 }
 
+// Get the "oldest" item from the list. Will block until an item is available
+// The returned error is of type EMTPY_LIST and should NEVER occur. I kept this in
+// to facilitate troubleshooting
 func (l *ConcurrentList) GetNext() (interface{}, error) {
 	l.mutex.Lock()
 	if len(l.data) > 0 {
@@ -73,6 +83,9 @@ func (l *ConcurrentList) GetNext() (interface{}, error) {
 	}
 }
 
+// Get the "oldest" item from the list. Will block until an item is available OR the specified
+// duration passed. The returned error is of type EMTPY_LIST and should NEVER occur. I kept this in
+// to facilitate troubleshooting
 func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{}, error) {
 	l.mutex.Lock()
 	var getNextChannel *chan bool
@@ -103,6 +116,7 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 	}
 }
 
+// Get all items of the list which match a predicate ("peak" into the list's items)
 func (l *ConcurrentList) GetWithFilter(predicate func(item interface{}) bool) []interface{} {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -116,6 +130,7 @@ func (l *ConcurrentList) GetWithFilter(predicate func(item interface{}) bool) []
 	return filteredItems
 }
 
+// Get and remove all items of the list which match a predicate
 func (l *ConcurrentList) DeleteWithFilter(predicate func(item interface{}) bool) []interface{} {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
@@ -133,6 +148,7 @@ func (l *ConcurrentList) DeleteWithFilter(predicate func(item interface{}) bool)
 	return filteredItems
 }
 
+// Return the length of the list
 func (l *ConcurrentList) Length() int {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
