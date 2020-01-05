@@ -2,7 +2,6 @@ package concurrentList
 
 import (
 	"testing"
-	"time"
 )
 
 // This will get stuck in a deadlock, if it fails
@@ -59,12 +58,8 @@ func verify(verifyItems []map[int]bool) bool {
 }
 
 func consumer(list *ConcurrentList, readChannel *chan []int, t *testing.T) {
-	timeSpentWaiting := int64(0)
 	for {
-		tmp := time.Now()
 		item, err := list.GetNext()
-		dur := time.Since(tmp)
-		timeSpentWaiting += dur.Nanoseconds()
 		if err != nil {
 			t.Error("error", err)
 			continue
