@@ -31,8 +31,8 @@ func TestGetNextWithTimeout(t *testing.T) {
 		return
 	}
 
-	if err != EMPTY_LIST {
-		t.Error("received wrong error")
+	if err != ErrEmptyList {
+		t.Error("receiver wrong error")
 		return
 	}
 }

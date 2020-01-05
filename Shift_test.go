@@ -23,12 +23,12 @@ func TestShift(t *testing.T) {
 		for {
 			tmp, err := list.Shift()
 
-			if err == EMPTY_LIST && lastShifted < length-1 {
+			if err == ErrEmptyList && lastShifted < length-1 {
 				time.Sleep(time.Millisecond)
 				continue
 			}
 
-			if err == EMPTY_LIST && lastShifted == length-1 {
+			if err == ErrEmptyList && lastShifted == length-1 {
 				done <- true
 				return
 			}

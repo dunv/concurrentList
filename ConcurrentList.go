@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// EMPTY_LIST error is returned if one tries to get items from an empty list
-var EMPTY_LIST = errors.New("list is empty")
+// ErrEmptyList is returned if one tries to get items from an empty list
+var ErrEmptyList = errors.New("list is empty")
 
 // ConcurrentList data-structure which holds all data
 type ConcurrentList struct {
@@ -48,7 +48,7 @@ func (l *ConcurrentList) Shift() (interface{}, error) {
 	defer l.mutex.Unlock()
 
 	if len(l.data) < 1 {
-		return nil, EMPTY_LIST
+		return nil, ErrEmptyList
 	}
 
 	firstElement := l.data[0]
@@ -59,7 +59,7 @@ func (l *ConcurrentList) Shift() (interface{}, error) {
 // internal helper function
 func (l *ConcurrentList) shiftWithoutLock() (interface{}, error) {
 	if len(l.data) < 1 {
-		return nil, EMPTY_LIST
+		return nil, ErrEmptyList
 	}
 
 	firstElement := l.data[0]
@@ -106,7 +106,7 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 		return l.GetNext()
 	case <-time.After(timeout):
 		l.mutex.Lock()
-		newSubscriberList := make([]*chan bool, 0)
+		var newSubscriberList []*chan bool
 		for index := range l.nextAddedSubscribers {
 			if l.nextAddedSubscribers[index] != getNextChannel {
 				newSubscriberList = append(newSubscriberList, l.nextAddedSubscribers[index])
@@ -114,7 +114,7 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 		}
 		l.nextAddedSubscribers = newSubscriberList
 		l.mutex.Unlock()
-		return nil, EMPTY_LIST
+		return nil, ErrEmptyList
 	}
 }
 
@@ -132,7 +132,7 @@ func (l *ConcurrentList) GetWithFilter(predicate func(item interface{}) bool) []
 	return filteredItems
 }
 
-// DeleteWithfilter will get and remove all items of the list which match a predicate
+// DeleteWithFilter will get and remove all items of the list which match a predicate
 func (l *ConcurrentList) DeleteWithFilter(predicate func(item interface{}) bool) []interface{} {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
