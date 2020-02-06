@@ -42,6 +42,23 @@ func (l *ConcurrentList) Append(item interface{}) {
 		subscriber := l.nextAddedSubscribers[0]
 		l.nextAddedSubscribers = l.nextAddedSubscribers[1:len(l.nextAddedSubscribers)]
 		go func() {
+			// TODO: fix this, goroutine leaks
+			*subscriber <- true
+		}()
+	}
+}
+
+func (l *ConcurrentList) AddToTop(item interface{}) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.data = append([]interface{}{item}, l.data...)
+
+	if len(l.nextAddedSubscribers) > 0 {
+		subscriber := l.nextAddedSubscribers[0]
+		l.nextAddedSubscribers = l.nextAddedSubscribers[1:len(l.nextAddedSubscribers)]
+		go func() {
+			// TODO: fix this, goroutine leaks
 			*subscriber <- true
 		}()
 	}
@@ -64,6 +81,18 @@ func (l *ConcurrentList) shiftWithoutLock() (interface{}, error) {
 
 	firstElement := l.data[0]
 	l.data = l.data[1:len(l.data)]
+	return firstElement, nil
+}
+
+func (l *ConcurrentList) Peek() (interface{}, error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if len(l.data) < 1 {
+		return nil, ErrEmptyList
+	}
+
+	firstElement := l.data[0]
 	return firstElement, nil
 }
 
