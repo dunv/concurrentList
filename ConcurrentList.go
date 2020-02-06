@@ -1,6 +1,7 @@
 package concurrentList
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -94,6 +95,12 @@ func (l *ConcurrentList) GetNext() (interface{}, error) {
 // duration passed. The returned error is of type ErrEmptyList and should NEVER occur. I kept this in
 // to facilitate troubleshooting
 func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{}, error) {
+	ctx, cancelFunc := context.WithTimeout(context.Background(), timeout)
+	defer cancelFunc()
+	return l.GetNextWithContext(ctx)
+}
+
+func (l *ConcurrentList) GetNextWithContext(ctx context.Context) (interface{}, error) {
 	l.mutex.Lock()
 
 	// If we have an item in the list -> return it immediately
@@ -112,10 +119,9 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 	case <-*getNextChannel:
 		// We either receive an item in time
 		return l.GetNext()
-	case <-time.After(timeout):
+	case <-ctx.Done():
 		// ... or not -> remove ourselves from subscriber list an return ErrEmptyList
 		l.mutex.Lock()
-
 		// Remove from subscriber-list, as timeout occured (essentially recreating the list)
 		var newSubscriberList []*chan bool
 		for index := range l.nextAddedSubscribers {
@@ -125,7 +131,6 @@ func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{},
 		}
 		l.nextAddedSubscribers = newSubscriberList
 		l.mutex.Unlock()
-
 		return nil, ErrEmptyList
 	}
 }
