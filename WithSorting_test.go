@@ -24,11 +24,11 @@ func TestWithSorting(t *testing.T) {
 		item:     "prio200",
 		priority: 200,
 	})
-	list.Append(test{
+	list.AddToTop(test{
 		item:     "prio100",
 		priority: 100,
 	})
-	list.Append(test{
+	list.AddToTop(test{
 		item:     "prio300",
 		priority: 300,
 	})

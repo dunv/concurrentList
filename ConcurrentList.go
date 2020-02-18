@@ -72,6 +72,12 @@ func (l *ConcurrentList) AddToTop(item interface{}) {
 
 	l.data = append([]interface{}{item}, l.data...)
 
+	if l.opts.sortByFunc != nil {
+		sort.Slice(l.data, func(i, j int) bool {
+			return (*l.opts.sortByFunc)(l.data[i], l.data[j])
+		})
+	}
+
 	if len(l.nextAddedSubscribers) > 0 {
 		subscriber := l.nextAddedSubscribers[0]
 		l.nextAddedSubscribers = l.nextAddedSubscribers[1:len(l.nextAddedSubscribers)]
