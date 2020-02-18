@@ -3,6 +3,7 @@ package concurrentList
 import (
 	"context"
 	"errors"
+	"sort"
 	"sync"
 	"time"
 )
@@ -20,14 +21,25 @@ type ConcurrentList struct {
 
 	// Keep track of subscribers in a list. This way we can preserve order
 	nextAddedSubscribers []*chan bool
+
+	// Options
+	opts concurrentListOptions
 }
 
 // NewConcurrentList is the constructor for creating a ConcurrentList (is required for initializing subscriber channels)
-func NewConcurrentList() *ConcurrentList {
+func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
+	mergedOpts := concurrentListOptions{
+		sortByFunc: nil,
+	}
+	for _, opt := range opts {
+		opt.apply(&mergedOpts)
+	}
+
 	return &ConcurrentList{
 		data:                 []interface{}{},
 		mutex:                sync.Mutex{},
 		nextAddedSubscribers: make([]*chan bool, 0),
+		opts:                 mergedOpts,
 	}
 }
 
@@ -37,6 +49,12 @@ func (l *ConcurrentList) Append(item interface{}) {
 	defer l.mutex.Unlock()
 
 	l.data = append(l.data, item)
+
+	if l.opts.sortByFunc != nil {
+		sort.Slice(l.data, func(i, j int) bool {
+			return (*l.opts.sortByFunc)(l.data[i], l.data[j])
+		})
+	}
 
 	if len(l.nextAddedSubscribers) > 0 {
 		subscriber := l.nextAddedSubscribers[0]
