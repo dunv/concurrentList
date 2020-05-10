@@ -1,6 +1,7 @@
 package concurrentList
 
 import (
+	"context"
 	"testing"
 )
 
@@ -10,10 +11,13 @@ func TestGetNext(t *testing.T) {
 	insertItems := []map[int]bool{}
 	verifyItems := []map[int]bool{}
 
-	totalProducer := 10
-	totalItemsPerProducer := 10000
-	totalConsumer := 1000
+	totalProducer := 100
+	totalItemsPerProducer := 1000
+	totalConsumer := 100
 	bufferSize := totalProducer * totalItemsPerProducer
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// Create fixture
 	readChannel := make(chan []int, bufferSize)
@@ -28,7 +32,7 @@ func TestGetNext(t *testing.T) {
 
 	// Create consumers
 	for i := 0; i < totalConsumer; i++ {
-		go consumer(list, &readChannel, t)
+		go consumer(list, &readChannel, ctx, t)
 	}
 
 	// Create producers
@@ -57,12 +61,13 @@ func verify(verifyItems []map[int]bool) bool {
 	return true
 }
 
-func consumer(list *ConcurrentList, readChannel *chan []int, t *testing.T) {
+func consumer(list *ConcurrentList, readChannel *chan []int, ctx context.Context, t *testing.T) {
 	for {
-		item, err := list.GetNext()
+		item, err := list.GetNext(ctx)
 		if err != nil {
-			t.Error("error", err)
-			continue
+			if err == ErrEmptyList {
+				return
+			}
 		}
 
 		parsed, ok := item.([]int)

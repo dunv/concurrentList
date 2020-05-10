@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/net/context"
 )
 
 func TestWithSorting(t *testing.T) {
@@ -11,6 +12,9 @@ func TestWithSorting(t *testing.T) {
 		item     string
 		priority int
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	list := NewConcurrentList(WithSorting(func(i, j interface{}) bool {
 		return i.(test).priority > j.(test).priority
@@ -33,22 +37,22 @@ func TestWithSorting(t *testing.T) {
 		priority: 300,
 	})
 
-	item1, err := list.GetNext()
+	item1, err := list.GetNext(ctx)
 	assert.NoError(t, err)
 	assert.IsType(t, test{}, item1)
 	assert.Equal(t, "prio500", item1.(test).item)
 
-	item2, err := list.GetNext()
+	item2, err := list.GetNext(ctx)
 	assert.NoError(t, err)
 	assert.IsType(t, test{}, item2)
 	assert.Equal(t, "prio300", item2.(test).item)
 
-	item3, err := list.GetNext()
+	item3, err := list.GetNext(ctx)
 	assert.NoError(t, err)
 	assert.IsType(t, test{}, item3)
 	assert.Equal(t, "prio200", item3.(test).item)
 
-	item4, err := list.GetNext()
+	item4, err := list.GetNext(ctx)
 	assert.NoError(t, err)
 	assert.IsType(t, test{}, item4)
 	assert.Equal(t, "prio100", item4.(test).item)
