@@ -5,11 +5,11 @@ import (
 	"errors"
 	"sort"
 	"sync"
-	"time"
+	"sync/atomic"
 )
 
 // ErrEmptyList is returned if one tries to get items from an empty list
-var ErrEmptyList = errors.New("err: list is empty")
+var ErrEmptyList = errors.New("list is empty")
 
 // ConcurrentList data-structure which holds all data
 type ConcurrentList struct {
@@ -24,6 +24,10 @@ type ConcurrentList struct {
 
 	// Options
 	opts concurrentListOptions
+
+	// debug
+	runningSignalRoutines *int64
+	runningWaitRoutines   *int64
 }
 
 // NewConcurrentList is the constructor for creating a ConcurrentList (is required for initializing subscriber channels)
@@ -37,16 +41,21 @@ func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 
 	lock := new(sync.Mutex)
 
+	runningSignalRoutines := int64(0)
+	runningWaitRoutines := int64(0)
+
 	return &ConcurrentList{
-		data:     []interface{}{},
-		lock:     lock,
-		notEmpty: sync.NewCond(lock),
-		opts:     mergedOpts,
+		data:                  []interface{}{},
+		lock:                  lock,
+		notEmpty:              sync.NewCond(lock),
+		opts:                  mergedOpts,
+		runningSignalRoutines: &runningSignalRoutines,
+		runningWaitRoutines:   &runningWaitRoutines,
 	}
 }
 
 // Append to list. This method should never block
-func (l *ConcurrentList) Append(item interface{}) {
+func (l *ConcurrentList) Push(item interface{}) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -56,20 +65,7 @@ func (l *ConcurrentList) Append(item interface{}) {
 			return (*l.opts.sortByFunc)(l.data[i], l.data[j])
 		})
 	}
-
-	l.notEmpty.Signal()
-}
-
-func (l *ConcurrentList) AddToTop(item interface{}) {
-	l.lock.Lock()
-	defer l.lock.Unlock()
-
-	l.data = append([]interface{}{item}, l.data...)
-	if l.opts.sortByFunc != nil {
-		sort.Slice(l.data, func(i, j int) bool {
-			return (*l.opts.sortByFunc)(l.data[i], l.data[j])
-		})
-	}
+	// fmt.Println("count", len(l.data))
 
 	l.notEmpty.Signal()
 }
@@ -92,6 +88,8 @@ func (l *ConcurrentList) shift() (interface{}, error) {
 	firstElement := l.data[0]
 	l.data = l.data[1:len(l.data)]
 
+	// fmt.Println("count", len(l.data))
+
 	return firstElement, nil
 }
 
@@ -107,40 +105,41 @@ func (l *ConcurrentList) Peek() (interface{}, error) {
 	return firstElement, nil
 }
 
-// GetNext will get the "oldest" item from the list.
-// Will block until an item is available or the context expires
 func (l *ConcurrentList) GetNext(ctx context.Context) (interface{}, error) {
 	l.lock.Lock()
-	defer l.lock.Unlock()
+	atomic.AddInt64(l.runningWaitRoutines, 1)
+	// fmt.Printf("waitCount %d\n", *l.runningWaitRoutines)
 
 	useCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Start one routine which wakes the other one up after the context expired
 	go func() {
+		atomic.AddInt64(l.runningSignalRoutines, 1)
+		// fmt.Printf("signalerCount %d\n", *l.runningSignalRoutines)
 		<-useCtx.Done()
 		l.notEmpty.Signal()
+		atomic.AddInt64(l.runningSignalRoutines, -1)
+		// fmt.Printf("signalerCount %d\n", *l.runningSignalRoutines)
 	}()
 
 	// Wait until we have something or the context expired
-	for len(l.data) == 0 && ctx.Err() == nil {
+	for len(l.data) == 0 || ctx.Err() != nil {
+		if err := ctx.Err(); err != nil {
+			atomic.AddInt64(l.runningWaitRoutines, -1)
+			// fmt.Printf("waitCount %d\n", *l.runningWaitRoutines)
+			l.lock.Unlock()
+			return nil, ErrEmptyList
+		}
 		l.notEmpty.Wait()
 	}
 
-	// If only context expired: return empty list
-	if err := ctx.Err(); err != nil {
-		return nil, ErrEmptyList
-	}
+	data, err := l.shift()
+	atomic.AddInt64(l.runningWaitRoutines, -1)
+	// fmt.Printf("waitCount %d\n", *l.runningWaitRoutines)
+	l.lock.Unlock()
 
-	// If we have something -> return it
-	return l.shift()
-}
-
-// GetNextWithTimeout will get the "oldest" item from the list. Will block until an item is available OR the specified duration passed.
-func (l *ConcurrentList) GetNextWithTimeout(timeout time.Duration) (interface{}, error) {
-	ctx, cancelFunc := context.WithTimeout(context.Background(), timeout)
-	defer cancelFunc()
-	return l.GetNext(ctx)
+	return data, err
 }
 
 // GetWithFilter will get all items of the list which match a predicate ("peak" into the list's items)
@@ -184,4 +183,8 @@ func (l *ConcurrentList) Length() int {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	return len(l.data)
+}
+
+func (l *ConcurrentList) Debug() (int64, int64) {
+	return atomic.LoadInt64(l.runningWaitRoutines), atomic.LoadInt64(l.runningSignalRoutines)
 }

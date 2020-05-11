@@ -9,7 +9,7 @@ func TestGetWithFilter(t *testing.T) {
 	list := NewConcurrentList()
 
 	for i := 0; i < length; i++ {
-		list.Append(i)
+		list.Push(i)
 	}
 
 	if list.Length() != length {

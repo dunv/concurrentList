@@ -3,6 +3,7 @@ package concurrentList
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // This will get stuck in a deadlock, if it fails
@@ -17,7 +18,6 @@ func TestGetNext(t *testing.T) {
 	bufferSize := totalProducer * totalItemsPerProducer
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Create fixture
 	readChannel := make(chan []int, bufferSize)
@@ -41,13 +41,29 @@ func TestGetNext(t *testing.T) {
 	}
 
 	// Validate
-	for item := range readChannel {
-		verifyItems[item[0]][item[1]] = true
-		if verify(verifyItems) {
-			return
+	allValid := make(chan bool)
+	go func() {
+		for item := range readChannel {
+			verifyItems[item[0]][item[1]] = true
+			if verify(verifyItems) {
+				allValid <- true
+			}
 		}
-	}
+	}()
 
+	// Wait until validation is done, then cancel all contexts
+	<-allValid
+	cancel()
+
+	// Wait until everything is cleaned up
+	for {
+		wait, signal := list.Debug()
+		if wait > 0 && signal > 0 {
+			time.Sleep(1 * time.Millisecond)
+			continue
+		}
+		break
+	}
 }
 
 func verify(verifyItems []map[int]bool) bool {
@@ -83,6 +99,6 @@ func producer(insertItems map[int]bool, producerIndex int, list *ConcurrentList)
 	for index := range insertItems {
 		tmp1 := producerIndex
 		tmp2 := index
-		list.Append([]int{tmp1, tmp2})
+		list.Push([]int{tmp1, tmp2})
 	}
 }

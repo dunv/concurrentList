@@ -12,7 +12,7 @@ func TestShift(t *testing.T) {
 	// Asynchronously append to list
 	go func(list *ConcurrentList, length int) {
 		for i := 0; i < length; i++ {
-			list.Append(i)
+			list.Push(i)
 		}
 	}(list, length)
 

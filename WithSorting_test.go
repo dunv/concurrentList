@@ -20,19 +20,19 @@ func TestWithSorting(t *testing.T) {
 		return i.(test).priority > j.(test).priority
 	}))
 
-	list.Append(test{
+	list.Push(test{
 		item:     "prio500",
 		priority: 500,
 	})
-	list.Append(test{
+	list.Push(test{
 		item:     "prio200",
 		priority: 200,
 	})
-	list.AddToTop(test{
+	list.Push(test{
 		item:     "prio100",
 		priority: 100,
 	})
-	list.AddToTop(test{
+	list.Push(test{
 		item:     "prio300",
 		priority: 300,
 	})
