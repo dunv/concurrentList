@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// This will get stuck in a deadlock, if it fails
 func TestGetNext(t *testing.T) {
 	list := NewConcurrentList()
 	insertItems := []map[int]bool{}
