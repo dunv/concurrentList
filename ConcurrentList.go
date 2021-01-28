@@ -175,7 +175,7 @@ func (l *ConcurrentList) GetNext(ctx context.Context) (interface{}, error) {
 	return data, err
 }
 
-// GetWithFilter will get all items of the list which match a predicate ("peak" into the list's items)
+// GetWithFilter will get all items of the list which match a predicate ("peek" into the list's items)
 func (l *ConcurrentList) GetWithFilter(predicate func(item interface{}) bool) []interface{} {
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -274,7 +274,6 @@ func (l *ConcurrentList) persistenceCreateFile(item interface{}) error {
 	err = file.Sync()
 	if err != nil {
 		return err
-
 	}
 
 	return nil
