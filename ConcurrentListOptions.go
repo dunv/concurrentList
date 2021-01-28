@@ -1,19 +1,16 @@
 package concurrentList
 
-import "time"
-
 type ConcurrentListOption interface {
 	apply(*concurrentListOptions)
 }
 
 type concurrentListOptions struct {
-	sortByFunc          *func(i, j interface{}) bool
+	lessFunc            *func(i, j interface{}) bool
 	persistChanges      bool
 	persistRootPath     string
 	persistItemType     interface{}
 	persistFileNameFunc *func(i interface{}) string
 	persistErrorHandler *func(error)
-	persistTimeout      time.Duration
 }
 
 type funcConcurrentListOption struct {
@@ -28,19 +25,30 @@ func newFuncConcurrentListOption(f func(*concurrentListOptions)) *funcConcurrent
 	return &funcConcurrentListOption{f: f}
 }
 
-func WithSorting(sortByFunc func(i, j interface{}) bool) ConcurrentListOption {
+// WithSorting will automatically sort the contents of the list everytime
+// an item is pushed according to the passed function
+// WithSorting can also be used to create a priorityQueue
+func WithSorting(lessFunc func(i, j interface{}) bool) ConcurrentListOption {
 	return newFuncConcurrentListOption(func(o *concurrentListOptions) {
-		o.sortByFunc = &sortByFunc
+		o.lessFunc = &lessFunc
 	})
 }
 
-func WithPersistence(rootPath string, itemType interface{}, timeout time.Duration, fileNameFunc func(i interface{}) string, errorHandler func(error)) ConcurrentListOption {
+// WithPersistence adds persistence in terms of "one file per item in the list" on the harddrive
+// Whenever anything is added or removed a file with the json-marshaled contents is put into or removed from a directory.
+// The caller needs to make sure that the directory of rootPath exists and is writable by the process
+// fileNameFunc determines the fileName of every item-file
+// itemType is required so the types can be reconstructed from the contents of the rootFolder
+// an optional errorHandler can be passed if the caller wants to process perstisting errors
+func WithPersistence(rootPath string, itemType interface{}, fileNameFunc func(i interface{}) string, errorHandler ...func(error)) ConcurrentListOption {
 	return newFuncConcurrentListOption(func(o *concurrentListOptions) {
 		o.persistChanges = true
 		o.persistRootPath = rootPath
 		o.persistItemType = itemType
 		o.persistFileNameFunc = &fileNameFunc
-		o.persistErrorHandler = &errorHandler
-		o.persistTimeout = timeout
+
+		if len(errorHandler) == 1 {
+			o.persistErrorHandler = &errorHandler[0]
+		}
 	})
 }

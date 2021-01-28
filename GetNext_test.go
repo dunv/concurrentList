@@ -56,7 +56,7 @@ func TestGetNext(t *testing.T) {
 
 	// Wait until everything is cleaned up
 	for {
-		wait, signal := list.Debug()
+		wait, signal := list.debug()
 		if wait > 0 && signal > 0 {
 			time.Sleep(1 * time.Millisecond)
 			continue

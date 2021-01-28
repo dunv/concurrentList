@@ -4,7 +4,15 @@
 
 # concurrentList
 
-A simple implementation of a concurrent list, which supports getting multiple items by filter, blocking reads and blocking reads with timeout.
+A simple implementation of a concurrent list, which supports
+
+- thread-safe `Push` and `Shift` operation
+- automatic sorting option (a.k.a priorityQueue)
+- blocking reads (`list.GetNext(ctx context.Context)`)
+- peeking into the contents of the list without modifying it
+- thread-safe removal of multiple items
+- optional persistence of the list (i.e. across reboots) by means of writing a file per item in the list in a predefined folder
+
 See GoDoc (badge above) and tests for more examples.
 
 ```go

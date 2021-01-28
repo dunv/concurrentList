@@ -16,7 +16,10 @@ import (
 // ErrEmptyList is returned if one tries to get items from an empty list
 var ErrEmptyList = errors.New("list is empty")
 
-// ConcurrentList data-structure which holds all data
+// ConcurrentList is a thread-safe datastructure which holds a list of items (interfaces{})
+// if desired these items can be automatically sorted or the list persisted on the HDD upon each change
+// Any goroutine which calls GetNext() will block until an item is available (they are guaranteed to
+// to continue in the same order GetNext() is called) or a passed context expires
 type ConcurrentList struct {
 	// Hold data
 	data []interface{}
@@ -35,10 +38,10 @@ type ConcurrentList struct {
 	runningWaitRoutines   *int64
 }
 
-// NewConcurrentList is the constructor for creating a ConcurrentList (is required for initializing subscriber channels)
+// Constructor for creating a ConcurrentList (is required for initializing subscriber channels)
 func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 	mergedOpts := concurrentListOptions{
-		sortByFunc: nil,
+		lessFunc: nil,
 	}
 	for _, opt := range opts {
 		opt.apply(&mergedOpts)
@@ -61,7 +64,7 @@ func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 	// Reconstruct persisted list
 	if mergedOpts.persistChanges {
 		err := list.persistenceLoad()
-		if err != nil {
+		if err != nil && mergedOpts.persistErrorHandler != nil {
 			(*mergedOpts.persistErrorHandler)(err)
 		}
 	}
@@ -70,22 +73,22 @@ func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 
 }
 
-// Append to list. This method should never block
+// Append to the end of the list
 func (l *ConcurrentList) Push(item interface{}) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
 	l.data = append(l.data, item)
-	if l.opts.sortByFunc != nil {
+	if l.opts.lessFunc != nil {
 		sort.Slice(l.data, func(i, j int) bool {
-			return (*l.opts.sortByFunc)(l.data[i], l.data[j])
+			return (*l.opts.lessFunc)(l.data[i], l.data[j])
 		})
 	}
 
 	// Write a single file per item in a directory
 	if l.opts.persistChanges {
 		err := l.persistenceCreateFile(item)
-		if err != nil {
+		if err != nil && l.opts.persistErrorHandler != nil {
 			(*l.opts.persistErrorHandler)(err)
 		}
 	}
@@ -95,35 +98,13 @@ func (l *ConcurrentList) Push(item interface{}) {
 	l.notEmpty.Signal()
 }
 
-// Shift will attempt to get the "oldest" item from the list
+// Shift attempts to get the "oldest" item from the list
 // Will return ErrEmptyList if the list is empty
 func (l *ConcurrentList) Shift() (interface{}, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
 	return l.shift()
-}
-
-// internal helper function
-func (l *ConcurrentList) shift() (interface{}, error) {
-	if len(l.data) < 1 {
-		return nil, ErrEmptyList
-	}
-
-	firstElement := l.data[0]
-	l.data = l.data[1:len(l.data)]
-
-	// Delete the single file in our persistanceDirectory
-	if l.opts.persistChanges {
-		err := l.persistenceDeleteFile(firstElement)
-		if err != nil {
-			(*l.opts.persistErrorHandler)(err)
-		}
-	}
-
-	// fmt.Println("count", len(l.data))
-
-	return firstElement, nil
 }
 
 func (l *ConcurrentList) Peek() (interface{}, error) {
@@ -138,6 +119,8 @@ func (l *ConcurrentList) Peek() (interface{}, error) {
 	return firstElement, nil
 }
 
+// Gets the "oldest" item in the list. Blocks until an item is available or the
+// passed in context expires
 func (l *ConcurrentList) GetNext(ctx context.Context) (interface{}, error) {
 	l.lock.Lock()
 	atomic.AddInt64(l.runningWaitRoutines, 1)
@@ -175,7 +158,8 @@ func (l *ConcurrentList) GetNext(ctx context.Context) (interface{}, error) {
 	return data, err
 }
 
-// GetWithFilter will get all items of the list which match a predicate ("peek" into the list's items)
+// GetWithFilter will get all items of the list which match a predicate WITHOUT changing the list
+// ("peek" into the list's items)
 func (l *ConcurrentList) GetWithFilter(predicate func(item interface{}) bool) []interface{} {
 	l.lock.Lock()
 	defer l.lock.Unlock()
@@ -208,7 +192,7 @@ func (l *ConcurrentList) DeleteWithFilter(predicate func(item interface{}) bool)
 	if l.opts.persistChanges {
 		for _, item := range filteredItems {
 			err := l.persistenceDeleteFile(item)
-			if err != nil {
+			if err != nil && l.opts.persistErrorHandler != nil {
 				(*l.opts.persistErrorHandler)(err)
 			}
 		}
@@ -228,8 +212,32 @@ func (l *ConcurrentList) Length() int {
 	return len(l.data)
 }
 
-func (l *ConcurrentList) Debug() (int64, int64) {
+// for testing. The metrics tell the caller how many goroutines are
+// running in order to service the concurrentList
+func (l *ConcurrentList) debug() (int64, int64) {
 	return atomic.LoadInt64(l.runningWaitRoutines), atomic.LoadInt64(l.runningSignalRoutines)
+}
+
+// internal helper function for getting the first item. the caller needs to make sure the collection is locked
+func (l *ConcurrentList) shift() (interface{}, error) {
+	if len(l.data) < 1 {
+		return nil, ErrEmptyList
+	}
+
+	firstElement := l.data[0]
+	l.data = l.data[1:len(l.data)]
+
+	// Delete the single file in our persistanceDirectory
+	if l.opts.persistChanges {
+		err := l.persistenceDeleteFile(firstElement)
+		if err != nil && l.opts.persistErrorHandler != nil {
+			(*l.opts.persistErrorHandler)(err)
+		}
+	}
+
+	// fmt.Println("count", len(l.data))
+
+	return firstElement, nil
 }
 
 func (l *ConcurrentList) persistenceLoad() error {
