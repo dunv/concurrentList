@@ -49,40 +49,25 @@ func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 	runningSignalRoutines := int64(0)
 	runningWaitRoutines := int64(0)
 
-	data := []interface{}{}
-
-	// Reconstruct persisted list
-	if mergedOpts.persistChanges {
-		files, err := ioutil.ReadDir(mergedOpts.persistRootPath)
-		if err != nil {
-			(*mergedOpts.persistErrorHandler)(err)
-		} else {
-			for _, file := range files {
-				tmp := reflect.New(reflect.TypeOf(mergedOpts.persistItemType)).Interface()
-				marshaled, err := ioutil.ReadFile(filepath.Join(mergedOpts.persistRootPath, file.Name()))
-				if err != nil {
-					(*mergedOpts.persistErrorHandler)(err)
-				} else {
-					err = json.Unmarshal(marshaled, &tmp)
-					if err != nil {
-						(*mergedOpts.persistErrorHandler)(err)
-
-					} else {
-						data = append(data, tmp)
-					}
-				}
-			}
-		}
-	}
-
-	return &ConcurrentList{
-		data:                  data,
+	list := &ConcurrentList{
+		data:                  []interface{}{},
 		lock:                  lock,
 		notEmpty:              sync.NewCond(lock),
 		opts:                  mergedOpts,
 		runningSignalRoutines: &runningSignalRoutines,
 		runningWaitRoutines:   &runningWaitRoutines,
 	}
+
+	// Reconstruct persisted list
+	if mergedOpts.persistChanges {
+		err := list.persistenceLoad()
+		if err != nil {
+			(*mergedOpts.persistErrorHandler)(err)
+		}
+	}
+
+	return list
+
 }
 
 // Append to list. This method should never block
@@ -99,17 +84,12 @@ func (l *ConcurrentList) Push(item interface{}) {
 
 	// Write a single file per item in a directory
 	if l.opts.persistChanges {
-		marshaled, err := json.Marshal(item)
+		err := l.persistenceCreateFile(item)
 		if err != nil {
 			(*l.opts.persistErrorHandler)(err)
-		} else {
-			itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(item))
-			err = ioutil.WriteFile(itemPath, marshaled, 0644)
-			if err != nil {
-				(*l.opts.persistErrorHandler)(err)
-			}
 		}
 	}
+
 	// fmt.Println("count", len(l.data))
 
 	l.notEmpty.Signal()
@@ -135,8 +115,7 @@ func (l *ConcurrentList) shift() (interface{}, error) {
 
 	// Delete the single file in our persistanceDirectory
 	if l.opts.persistChanges {
-		itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(firstElement))
-		err := os.Remove(itemPath)
+		err := l.persistenceDeleteFile(firstElement)
 		if err != nil {
 			(*l.opts.persistErrorHandler)(err)
 		}
@@ -225,6 +204,16 @@ func (l *ConcurrentList) DeleteWithFilter(predicate func(item interface{}) bool)
 		}
 	}
 
+	// Delete all filtered files in the persistance directory
+	if l.opts.persistChanges {
+		for _, item := range filteredItems {
+			err := l.persistenceDeleteFile(item)
+			if err != nil {
+				(*l.opts.persistErrorHandler)(err)
+			}
+		}
+	}
+
 	// Keep non-filtered items
 	l.data = nonFilteredItems
 
@@ -241,4 +230,57 @@ func (l *ConcurrentList) Length() int {
 
 func (l *ConcurrentList) Debug() (int64, int64) {
 	return atomic.LoadInt64(l.runningWaitRoutines), atomic.LoadInt64(l.runningSignalRoutines)
+}
+
+func (l *ConcurrentList) persistenceLoad() error {
+	files, err := ioutil.ReadDir(l.opts.persistRootPath)
+	if err != nil {
+		return err
+	}
+
+	for _, file := range files {
+		tmp := reflect.New(reflect.TypeOf(l.opts.persistItemType)).Interface()
+		marshaled, err := ioutil.ReadFile(filepath.Join(l.opts.persistRootPath, file.Name()))
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(marshaled, &tmp)
+		if err != nil {
+			return err
+		}
+		// Make sure we are not storing a pointer to our item
+		l.data = append(l.data, reflect.ValueOf(tmp).Elem().Interface())
+	}
+
+	return nil
+}
+
+func (l *ConcurrentList) persistenceCreateFile(item interface{}) error {
+	marshaled, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(item))
+	file, err := os.Create(itemPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(marshaled)
+	if err != nil {
+		return err
+	}
+	err = file.Sync()
+	if err != nil {
+		return err
+
+	}
+
+	return nil
+}
+
+func (l *ConcurrentList) persistenceDeleteFile(item interface{}) error {
+	itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(item))
+	return os.Remove(itemPath)
 }

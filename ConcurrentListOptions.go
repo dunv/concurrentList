@@ -1,5 +1,7 @@
 package concurrentList
 
+import "time"
+
 type ConcurrentListOption interface {
 	apply(*concurrentListOptions)
 }
@@ -11,6 +13,7 @@ type concurrentListOptions struct {
 	persistItemType     interface{}
 	persistFileNameFunc *func(i interface{}) string
 	persistErrorHandler *func(error)
+	persistTimeout      time.Duration
 }
 
 type funcConcurrentListOption struct {
@@ -31,12 +34,13 @@ func WithSorting(sortByFunc func(i, j interface{}) bool) ConcurrentListOption {
 	})
 }
 
-func WithPersistance(rootPath string, itemType interface{}, fileNameFunc func(i interface{}) string, errorHandler func(error)) ConcurrentListOption {
+func WithPersistence(rootPath string, itemType interface{}, timeout time.Duration, fileNameFunc func(i interface{}) string, errorHandler func(error)) ConcurrentListOption {
 	return newFuncConcurrentListOption(func(o *concurrentListOptions) {
 		o.persistChanges = true
 		o.persistRootPath = rootPath
 		o.persistItemType = itemType
 		o.persistFileNameFunc = &fileNameFunc
 		o.persistErrorHandler = &errorHandler
+		o.persistTimeout = timeout
 	})
 }
