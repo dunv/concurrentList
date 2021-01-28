@@ -2,7 +2,12 @@ package concurrentList
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -44,8 +49,34 @@ func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 	runningSignalRoutines := int64(0)
 	runningWaitRoutines := int64(0)
 
+	data := []interface{}{}
+
+	// Reconstruct persisted list
+	if mergedOpts.persistChanges {
+		files, err := ioutil.ReadDir(mergedOpts.persistRootPath)
+		if err != nil {
+			(*mergedOpts.persistErrorHandler)(err)
+		} else {
+			for _, file := range files {
+				tmp := reflect.New(reflect.TypeOf(mergedOpts.persistItemType)).Interface()
+				marshaled, err := ioutil.ReadFile(filepath.Join(mergedOpts.persistRootPath, file.Name()))
+				if err != nil {
+					(*mergedOpts.persistErrorHandler)(err)
+				} else {
+					err = json.Unmarshal(marshaled, &tmp)
+					if err != nil {
+						(*mergedOpts.persistErrorHandler)(err)
+
+					} else {
+						data = append(data, tmp)
+					}
+				}
+			}
+		}
+	}
+
 	return &ConcurrentList{
-		data:                  []interface{}{},
+		data:                  data,
 		lock:                  lock,
 		notEmpty:              sync.NewCond(lock),
 		opts:                  mergedOpts,
@@ -64,6 +95,20 @@ func (l *ConcurrentList) Push(item interface{}) {
 		sort.Slice(l.data, func(i, j int) bool {
 			return (*l.opts.sortByFunc)(l.data[i], l.data[j])
 		})
+	}
+
+	// Write a single file per item in a directory
+	if l.opts.persistChanges {
+		marshaled, err := json.Marshal(item)
+		if err != nil {
+			(*l.opts.persistErrorHandler)(err)
+		} else {
+			itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(item))
+			err = ioutil.WriteFile(itemPath, marshaled, 0644)
+			if err != nil {
+				(*l.opts.persistErrorHandler)(err)
+			}
+		}
 	}
 	// fmt.Println("count", len(l.data))
 
@@ -87,6 +132,15 @@ func (l *ConcurrentList) shift() (interface{}, error) {
 
 	firstElement := l.data[0]
 	l.data = l.data[1:len(l.data)]
+
+	// Delete the single file in our persistanceDirectory
+	if l.opts.persistChanges {
+		itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(firstElement))
+		err := os.Remove(itemPath)
+		if err != nil {
+			(*l.opts.persistErrorHandler)(err)
+		}
+	}
 
 	// fmt.Println("count", len(l.data))
 
