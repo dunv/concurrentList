@@ -11,6 +11,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // ErrEmptyList is returned if one tries to get items from an empty list
@@ -67,6 +68,18 @@ func NewConcurrentList(opts ...ConcurrentListOption) *ConcurrentList {
 		if err != nil && mergedOpts.persistErrorHandler != nil {
 			(*mergedOpts.persistErrorHandler)(err)
 		}
+	}
+
+	if mergedOpts.ttlEnabled {
+		go func() {
+			for {
+				list.DeleteWithFilter(func(item interface{}) bool {
+					ttlAttribute := (*mergedOpts.ttlFunc)(item)
+					return time.Since(ttlAttribute) > *mergedOpts.ttlDuration
+				})
+				time.Sleep(*mergedOpts.ttlCheckInverval)
+			}
+		}()
 	}
 
 	return list
