@@ -17,7 +17,6 @@ type concurrentListOptions struct {
 	ttlDuration         *time.Duration
 	ttlCheckInverval    *time.Duration
 	ttlFunc             *func(i interface{}) time.Time
-	ttlErrorHandler     *func(error)
 }
 
 type funcConcurrentListOption struct {
@@ -60,15 +59,17 @@ func WithPersistence(rootPath string, itemType interface{}, fileNameFunc func(i 
 	})
 }
 
-func WithTTL(ttl time.Duration, ttlCheckInterval time.Duration, ttlFunc func(item interface{}) time.Time, errorHandler ...func(error)) ConcurrentListOption {
+// WithTTL adds a time-to-live to every item in the list
+// ATTENTION: Currently the user is required to add an attribute to every item which contains the timestamp of when it is added
+// Required parameters are
+// - ttl: 						how long will an item linger in the list until it is deleted automatically
+// - ttlCheckInterval: 			in which interval are the ttl's of the items checked
+// - ttlFunc: 					this func is called for every item in order to extract the timestamp of when it was added
+func WithTTL(ttl time.Duration, ttlCheckInterval time.Duration, ttlFunc func(item interface{}) time.Time) ConcurrentListOption {
 	return newFuncConcurrentListOption(func(o *concurrentListOptions) {
 		o.ttlEnabled = true
 		o.ttlDuration = &ttl
 		o.ttlFunc = &ttlFunc
 		o.ttlCheckInverval = &ttlCheckInterval
-
-		if len(errorHandler) == 1 {
-			o.ttlErrorHandler = &errorHandler[0]
-		}
 	})
 }
