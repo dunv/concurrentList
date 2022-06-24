@@ -23,7 +23,7 @@ func TestWithPersistence(t *testing.T) {
 		require.NoError(t, os.RemoveAll(tempDir))
 	}()
 
-	list := NewConcurrentList(WithPersistence(tempDir, test{}, func(item test) string {
+	list := NewConcurrentList(WithPersistence(tempDir, func(item test) string {
 		return item.Time.Format(time.RFC3339Nano)
 	}), WithSorting(func(i, j test) bool {
 		return i.Time.After(j.Time)
@@ -72,7 +72,7 @@ func TestWithPersistence(t *testing.T) {
 	list = nil
 
 	// Check if reconstructing the list from file-backup works
-	list2 := NewConcurrentList(WithPersistence(tempDir, test{}, func(item test) string {
+	list2 := NewConcurrentList(WithPersistence(tempDir, func(item test) string {
 		return item.Time.Format(time.RFC3339Nano)
 	}), WithSorting(func(i, j test) bool {
 		return i.Time.After(j.Time)

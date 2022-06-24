@@ -10,7 +10,6 @@ type concurrentListOptions[T any] struct {
 	lessFunc            *func(i, j T) bool
 	persistChanges      bool
 	persistRootPath     string
-	persistItemType     T
 	persistFileNameFunc *func(i T) string
 	persistErrorHandler *func(error)
 	ttlEnabled          bool
@@ -46,11 +45,10 @@ func WithSorting[T any](lessFunc func(i, j T) bool) ConcurrentListOption[T] {
 // fileNameFunc determines the fileName of every item-file
 // itemType is required so the types can be reconstructed from the contents of the rootFolder
 // an optional errorHandler can be passed if the caller wants to process perstisting errors
-func WithPersistence[T any](rootPath string, itemType T, fileNameFunc func(i T) string, errorHandler ...func(error)) ConcurrentListOption[T] {
+func WithPersistence[T any](rootPath string, fileNameFunc func(i T) string, errorHandler ...func(error)) ConcurrentListOption[T] {
 	return newFuncConcurrentListOption(func(o *concurrentListOptions[T]) {
 		o.persistChanges = true
 		o.persistRootPath = rootPath
-		o.persistItemType = itemType
 		o.persistFileNameFunc = &fileNameFunc
 
 		if len(errorHandler) == 1 {

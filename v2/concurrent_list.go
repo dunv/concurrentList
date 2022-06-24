@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -263,17 +262,17 @@ func (l *ConcurrentList[T]) persistenceLoad() error {
 	}
 
 	for _, file := range files {
-		tmp := reflect.New(reflect.TypeOf(l.opts.persistItemType)).Interface()
 		marshaled, err := ioutil.ReadFile(filepath.Join(l.opts.persistRootPath, file.Name()))
 		if err != nil {
 			return err
 		}
-		err = json.Unmarshal(marshaled, &tmp)
+		var elem T
+		err = json.Unmarshal(marshaled, &elem)
 		if err != nil {
 			return err
 		}
 		// Make sure we are not storing a pointer to our item
-		l.data = append(l.data, reflect.ValueOf(tmp).Elem().Interface().(T))
+		l.data = append(l.data, elem)
 	}
 
 	return nil
