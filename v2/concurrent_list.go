@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -86,11 +85,11 @@ func NewConcurrentList[T any](opts ...ConcurrentListOption[T]) *ConcurrentList[T
 }
 
 // Append to the end of the list
-func (l *ConcurrentList[T]) Push(item T) {
+func (l *ConcurrentList[T]) Push(items ...T) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
-	l.data = append(l.data, item)
+	l.data = append(l.data, items...)
 	if l.opts.lessFunc != nil {
 		sort.Slice(l.data, func(i, j int) bool {
 			return (*l.opts.lessFunc)(l.data[i], l.data[j])
@@ -99,13 +98,13 @@ func (l *ConcurrentList[T]) Push(item T) {
 
 	// Write a single file per item in a directory
 	if l.opts.persistChanges {
-		err := l.persistenceCreateFile(item)
-		if err != nil && l.opts.persistErrorHandler != nil {
-			(*l.opts.persistErrorHandler)(err)
+		for _, item := range items {
+			err := l.persistenceCreateFile(item)
+			if err != nil && l.opts.persistErrorHandler != nil {
+				(*l.opts.persistErrorHandler)(err)
+			}
 		}
 	}
-
-	// fmt.Println("count", len(l.data))
 
 	l.notEmpty.Signal()
 }
@@ -250,19 +249,17 @@ func (l *ConcurrentList[T]) shift() (T, error) {
 		}
 	}
 
-	// fmt.Println("count", len(l.data))
-
 	return firstElement, nil
 }
 
 func (l *ConcurrentList[T]) persistenceLoad() error {
-	files, err := ioutil.ReadDir(l.opts.persistRootPath)
+	files, err := os.ReadDir(l.opts.persistRootPath)
 	if err != nil {
 		return err
 	}
 
 	for _, file := range files {
-		marshaled, err := ioutil.ReadFile(filepath.Join(l.opts.persistRootPath, file.Name()))
+		marshaled, err := os.ReadFile(filepath.Join(l.opts.persistRootPath, file.Name()))
 		if err != nil {
 			return err
 		}
@@ -278,12 +275,12 @@ func (l *ConcurrentList[T]) persistenceLoad() error {
 	return nil
 }
 
-func (l *ConcurrentList[T]) persistenceCreateFile(item interface{}) error {
+func (l *ConcurrentList[T]) persistenceCreateFile(item T) error {
 	marshaled, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(item.(T)))
+	itemPath := filepath.Join(l.opts.persistRootPath, (*l.opts.persistFileNameFunc)(item))
 	file, err := os.Create(itemPath)
 	if err != nil {
 		return err
