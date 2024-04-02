@@ -77,6 +77,9 @@ func verify(verifyItems []map[int]bool) bool {
 }
 
 func consumer(list *ConcurrentList[[]int], readChannel *chan []int, ctx context.Context, t *testing.T) {
+	if t == nil {
+		panic("t is nil")
+	}
 	for {
 		item, err := list.GetNext(ctx)
 		if err != nil {

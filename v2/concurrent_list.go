@@ -51,7 +51,7 @@ func NewConcurrentList[T any](opts ...ConcurrentListOption[T]) *ConcurrentList[T
 	runningSignalRoutines := int64(0)
 	runningWaitRoutines := int64(0)
 
-	list := &ConcurrentList[T]{
+	l := &ConcurrentList[T]{
 		data:                  []T{},
 		lock:                  lock,
 		notEmpty:              sync.NewCond(lock),
@@ -62,16 +62,22 @@ func NewConcurrentList[T any](opts ...ConcurrentListOption[T]) *ConcurrentList[T
 
 	// Reconstruct persisted list
 	if mergedOpts.persistChanges {
-		err := list.persistenceLoad()
+		err := l.persistenceLoad()
 		if err != nil && mergedOpts.persistErrorHandler != nil {
 			(*mergedOpts.persistErrorHandler)(err)
+		}
+
+		if l.opts.lessFunc != nil {
+			sort.Slice(l.data, func(i, j int) bool {
+				return (*l.opts.lessFunc)(l.data[i], l.data[j])
+			})
 		}
 	}
 
 	if mergedOpts.ttlEnabled {
 		go func() {
 			for {
-				list.DeleteWithFilter(func(item T) bool {
+				l.DeleteWithFilter(func(item T) bool {
 					ttlAttribute := (*mergedOpts.ttlFunc)(item)
 					return time.Since(ttlAttribute) > *mergedOpts.ttlDuration
 				})
@@ -80,7 +86,7 @@ func NewConcurrentList[T any](opts ...ConcurrentListOption[T]) *ConcurrentList[T
 		}()
 	}
 
-	return list
+	return l
 
 }
 
