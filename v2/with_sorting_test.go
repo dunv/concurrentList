@@ -1,10 +1,10 @@
 package v2
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 )
 
 func TestWithSorting(t *testing.T) {
