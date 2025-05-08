@@ -22,7 +22,7 @@ type funcConcurrentListOption[T any] struct {
 	f func(*concurrentListOptions[T])
 }
 
-func (fdo *funcConcurrentListOption[T]) apply(do *concurrentListOptions[T]) {
+func (fdo *funcConcurrentListOption[T]) apply(do *concurrentListOptions[T]) { //nolint:unused
 	fdo.f(do)
 }
 

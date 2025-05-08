@@ -1,1 +1,4 @@
 .projectile
+.direnv
+.go
+.githooks

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -291,7 +292,11 @@ func (l *ConcurrentList[T]) persistenceCreateFile(item T) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("err closing file: %s\n", err)
+		}
+	}()
 
 	_, err = file.Write(marshaled)
 	if err != nil {
