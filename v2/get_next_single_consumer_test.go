@@ -2,7 +2,6 @@ package v2
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -25,7 +24,6 @@ func TestGetNextSingleConsumer(t *testing.T) {
 		for i := range max {
 			// add some delays, so the consumer needs to block
 			if i%(max/100) == 0 {
-				fmt.Println("sleeping")
 				time.Sleep(10 * time.Millisecond)
 			}
 			list.Push(i)
@@ -40,13 +38,11 @@ func TestGetNextSingleConsumer(t *testing.T) {
 				t.Error("unexpected error:", err)
 				t.FailNow()
 			}
-			fmt.Println("context done")
 			break
 		}
 
 		// fmt.Println("yielding item:", item)
 		if item == max-1 {
-			fmt.Println("cancelling")
 			cancel()
 		}
 

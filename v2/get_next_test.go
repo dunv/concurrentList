@@ -3,7 +3,6 @@ package v2
 import (
 	"context"
 	"testing"
-	"time"
 )
 
 func TestGetNext(t *testing.T) {
@@ -16,26 +15,24 @@ func TestGetNext(t *testing.T) {
 	totalConsumer := 100
 	bufferSize := totalProducer * totalItemsPerProducer
 
-	ctx, cancel := context.WithCancel(context.Background())
-
 	// Create fixture
 	readChannel := make(chan []int, bufferSize)
-	for i := 0; i < totalProducer; i++ {
+	for i := range totalProducer {
 		insertItems = append(insertItems, map[int]bool{})
 		verifyItems = append(verifyItems, map[int]bool{})
-		for j := 0; j < totalItemsPerProducer; j++ {
+		for j := range totalItemsPerProducer {
 			insertItems[i][j] = false
 			verifyItems[i][j] = false
 		}
 	}
 
 	// Create consumers
-	for i := 0; i < totalConsumer; i++ {
-		go consumer(list, &readChannel, ctx, t)
+	for range totalConsumer {
+		go consumer(list, readChannel, t.Context())
 	}
 
 	// Create producers
-	for i := 0; i < totalProducer; i++ {
+	for i := range totalProducer {
 		go producer(insertItems[i], i, list)
 	}
 
@@ -50,19 +47,8 @@ func TestGetNext(t *testing.T) {
 		}
 	}()
 
-	// Wait until validation is done, then cancel all contexts
+	// Wait until validation is done
 	<-allValid
-	cancel()
-
-	// Wait until everything is cleaned up
-	for {
-		wait, signal := list.debug()
-		if wait > 0 && signal > 0 {
-			time.Sleep(1 * time.Millisecond)
-			continue
-		}
-		break
-	}
 }
 
 func verify(verifyItems []map[int]bool) bool {
@@ -76,19 +62,13 @@ func verify(verifyItems []map[int]bool) bool {
 	return true
 }
 
-func consumer(list *ConcurrentList[[]int], readChannel *chan []int, ctx context.Context, t *testing.T) {
-	if t == nil {
-		panic("t is nil")
-	}
+func consumer(list *ConcurrentList[[]int], readChannel chan []int, ctx context.Context) {
 	for {
 		item, err := list.GetNext(ctx)
 		if err != nil {
-			if err == ErrEmptyList {
-				return
-			}
+			return
 		}
-
-		*readChannel <- item
+		readChannel <- item
 	}
 }
 
